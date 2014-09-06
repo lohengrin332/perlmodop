@@ -1,0 +1,62 @@
+*perlmodop.txt*	Functions for finding/opening Perl modules from Perl code.	2014-09-05
+
+This module is designed to be installed using pathogen.  For more information on pathogen, see here:
+
+	https://github.com/tpope/vim-pathogen
+
+	VIM REFERENCE MANUAL by J. David Lewis
+
+*perlmodop* *perlmodop.vim*
+
+1. Intro			|perlmodop-intro|
+2. Usage			|perlmodop-usage|
+3. Known Bugs and Limitations	|perlmodop-bugs|
+
+The functionality mentioned here is a plugin, see |add-plugin|.
+It requires that vim be compiled with the Perl feature.
+
+{I doubt that Vi supports any of this}
+
+
+==============================================================================
+1. Intro					*perlmodop-intro*
+
+
+==============================================================================
+2. Usage					*perlmodop-usage*
+
+perlmodop#OpenSourceFile()				*perlmodop#OpenSourceFile*
+When viewing a Perl file in the current buffer, navigate to a line which
+references a module.  With your cursor on this line, type:
+
+	:call perlmodop#OpenSourceFile()
+
+This will parse the module name into a file path, then search for that file
+in your default @INC path.  If multiple modules are referenced on the given
+line, each will be opened in a separate tab.
+
+For example, with the following simple Perl script:
+
+	#!/usr/bin/perl
+	use strict; use warnings;
+
+	exit;
+
+With the cursor on line #2 (use strict; use warnings;) calling
+perlmodop#OpenSourceFile() will open the strict.pm and warnings.pm packages in
+new tabs to the right of the current tab.
+
+Add the following to your .vimrc to map this action to the keystroke "go":
+
+	map go :call perlmodop#OpenSourceFile()<CR>
+
+perlmodop#LoadSourceFile()				*perlmodop#LoadSourceFile*
+Works identically to |perlmodop#OpenSourceFile|, but instead of opening the
+module(s) in a new tab, it processes the module(s) with |TlistAddFiles| and
+then runs |TlistOpen|.
+
+
+==============================================================================
+3. Known Bugs and Limitations			*perlmodop-bugs*
+
+==============================================================================
