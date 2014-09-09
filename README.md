@@ -17,4 +17,5 @@ use Data::Dumper;
 ...
 ```
 
-Type "go" and this package will be opened in a new tab to the right of your current tab.  If multiple package names exist on this line, each will be opened in the order that they appear on the line.
+Type "go" and the package (in this case "Data::Dumper") will be opened in a new tab to the right of your current tab.
+If multiple package names exist on this line, each will be opened in the order that they appear on the line.
