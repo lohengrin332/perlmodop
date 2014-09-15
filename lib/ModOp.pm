@@ -92,6 +92,11 @@ sub getFilesUnderCursor {
 
     return $self->getPackagesFromLine($line);
 }
+sub getFileUnderCursor {
+    my $self = shift;
+    my @files = $self->getFilesUnderCursor;
+    return $files[0];
+}
 
 =head2 getPackagesFromLine
 
@@ -153,7 +158,9 @@ sub getFileNameFromPackage {
     my $self = shift;
     my $package = shift;
 
-    return join('/', split('::', $package)) . ".pm";
+    VIM::Msg("package: $package") if($self->debug);
+    $package =~ s{::}{/}g;
+    return $package . ".pm";
 }
 
 =head2
@@ -181,6 +188,25 @@ sub getFilePath {
 =cut
 sub getINC {
     my $self = shift;
+
+    my @use_lines = grep(m/use lib /, $self->curwin->Buffer->Get(1 .. $self->curwin->Buffer->Count()));
+    VIM::Msg("use_lines:\n    ".join("\n    ", @use_lines)) if($self->debug);
+
+    for my $use_line(@use_lines) {
+        VIM::Msg("original use_line: $use_line") if($self->debug);
+        if($use_line =~ m/FindBin/) {
+            # Replace FindBin::? with appropriate overrides from the VIM API.
+            my $current_file = VIM::Eval('expand("%:p:h")');
+            $use_line =~ s{\$FindBin::Bin}{$current_file}g;
+            $use_line =~ s{\$FindBin::RealBin}{$current_file}g;
+        }
+        try {
+            VIM::Msg("modified use_line: $use_line") if($self->debug);
+            eval($use_line);
+        } catch {
+            # Do nothing as this was un-eval-able
+        };
+    }
 
     return @INC;
 }

@@ -25,8 +25,8 @@ function! perlmodop#OpenPerlSourceFile()
         return unless(-e $vim_utils);
         unshift(@INC, $vim_utils);
         require ModOp;
-        my $vt = ModOp->new(curwin => $main::curwin);
-        $vt->openSourceFile();
+        my $modop = ModOp->new(curwin => $main::curwin);
+        $modop->openSourceFile();
 EOF
     endif
   endif
@@ -45,8 +45,8 @@ function! perlmodop#LoadPerlSourceFile()
         return unless(-e $vim_utils);
         unshift(@INC, $vim_utils);
         require ModOp;
-        my $vt = ModOp->new(curwin => $main::curwin);
-        $vt->loadSourceFile();
+        my $modop = ModOp->new(curwin => $main::curwin);
+        $modop->loadSourceFile();
 EOF
     endif
   endif
