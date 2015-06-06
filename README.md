@@ -21,8 +21,22 @@ Type "go" and the package (in this case "Data::Dumper") will be opened in a new 
 If multiple package names exist on this line, each will be opened in the order that they appear on the line.
 
 
-To customize the behavior of the Perl code, you can declare a "PROPRIETARY_VIM_PATH" environment variable to
-direct the plugin to a perl lib directory with a "ModOp::ProprietaryRole" package in it.
+If you happen to be using a version of Perl different from what was compiled into vim (e.g. you run multiple versions of
+Perl with perlbrew, etc), you may need to add the following variables and aliases to your environment (assuming vim was
+compiled against `/usr/bin/perl`):
+
+```shell
+export VIMPERLLIB=$(PERL5LIB= /usr/bin/perl -le 'print join ":", @INC')
+alias vim='_PERL5LIB=$PERL5LIB PERL5LIB=${VIMPERLLIB} vim'
+```
+
+
+This will cause the Perl environment run by vim to use the correct libraries, etc when executing the ModOp code, but
+use the runtime Perl (i.e. `/usr/bin/env perl`) when determining the `@INC` path to search for library files.
+
+
+To customize this behavior, you can declare a "PROPRIETARY_VIM_PATH" environment variable to direct the plugin to a Perl lib
+directory with a "ModOp::ProprietaryRole" package in it.
 
 Example:
 
@@ -38,17 +52,22 @@ $ ls $PROPRIETARY_VIM_PATH -R
     ProprietaryRole.pm
 ```
 
-This package will be included as a Moo::Role, and should be defined as such:
+This package will be included as a Moose::Role, and should be defined as such:
 
 ```perl
 package ModOp::ProprietaryRole;
 
-use Moo:Role;
+use Moose:Role;
 
 around 'getINC' => sub {
     my $orig = shift;
     my $self = shift;
-    unshift(@INC, '/some/custom/perl/lib');
-    return $self->$orig(@_);
-}
+    return($self->$orig(@_), '/some/custom/perl/path');
+};
+
+around 'getUseLines' => sub {
+    my $orig = shift;
+    my $self = shift;
+    return($self->$orig(@_), "use lib '/some/custom/perl/path'");
+};
 ```
