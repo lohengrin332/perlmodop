@@ -1,7 +1,6 @@
 package ModOp;
 
-use Moo;
-use Try::Tiny;
+use Moose;
 
 =head1 NAME
 
@@ -15,31 +14,28 @@ Used to parse package names into actual package files, then either:
 
 =cut
 
+has 'curwin'    => ( is => 'rw', required => 1, );
+has 'debug'     => ( is => 'rw', default  => 0, );
+
 =head2 ModOp::ProprietaryRole
 
     Allow for customization to include proprietary or private code.
 
     If, for instance, your organization uses a custom library to manipulate the
     @INC paths, ModOp::ProprietaryRole can be created and added to the default
-    Perl path, or PROPRIETARY_VIM_PATH can be defined, getINC can be overridden
-    or extended, and that custom @INC path library can be called, allowing
-    ModOp to find Perl packages in your custom locations.
+    Perl path, or PROPRIETARY_VIM_PATH can be defined, getINC and getUseLines
+    can be overridden or extended, and that custom @INC path library can be
+    called, allowing ModOp to find Perl packages in your custom locations.
 
 =cut
-try {
-    unshift(@INC, "$ENV{PROPRIETARY_VIM_PATH}/lib")
-        if($ENV{PROPRIETARY_VIM_PATH} && -r "$ENV{PROPRIETARY_VIM_PATH}/lib/ModOp/ProprietaryRole.pm");
+if($ENV{PROPRIETARY_VIM_PATH} && -r "$ENV{PROPRIETARY_VIM_PATH}/lib/ModOp/ProprietaryRole.pm") {
+    unshift(@INC, "$ENV{PROPRIETARY_VIM_PATH}/lib");
     with qw(
         ModOp::ProprietaryRole
     );
-} catch {
-    # Do nothing
-};
+}
 
-has 'curwin' => ( is => 'rw', required => 1, );
-has 'debug'  => ( is => 'rw', default => 0, );
-
-=head2
+=head2 openSourceFile
 
     Utilizing the VIM API, find any package names on the current line of Perl
     code and open them in new tabs to the right of the current tab.
@@ -58,7 +54,7 @@ sub openSourceFile {
     VIM::DoCommand('tabnext');
 }
 
-=head2
+=head2 loadSourceFile
 
     Utilizing the VIM API, find any package names on the current line of Perl
     code and load them into the tags list, then open the tags list.
@@ -127,7 +123,7 @@ sub getPackagesFromLine {
     return @files;
 }
 
-=head2
+=head2 splitLineToParts
 
     Split a line into a list of potential package names, excluding characters
     which are not valid as parts of a package name.
@@ -149,7 +145,7 @@ sub splitLineToParts {
     return @parts;
 }
 
-=head2
+=head2 getFileNameFromPackage
 
     Convert a Perl package name to a partial file path.
 
@@ -163,7 +159,7 @@ sub getFileNameFromPackage {
     return $package . ".pm";
 }
 
-=head2
+=head2 getFilePath
 
     Given a partial file path, searh @INC paths for a matching file.
 
@@ -180,35 +176,90 @@ sub getFilePath {
     return undef;
 }
 
-=head2
+=head2 getINC
 
-    Return @INC.  This can be overridden or (more appropriately) extended via
+    Return @INC. This can be overridden or (more appropriately) extended via
     an "around" modifier to pull in extra paths if desired.
+
+    Accepts:
+        no arguments
+
+    Returns:
+        An array like what would be found in @INC.
 
 =cut
 sub getINC {
     my $self = shift;
 
-    my @use_lines = grep(m/use lib /, $self->curwin->Buffer->Get(1 .. $self->curwin->Buffer->Count()));
-    VIM::Msg("use_lines:\n    ".join("\n    ", @use_lines)) if($self->debug);
+    my @use_lines = $self->getUseLines;
 
-    for my $use_line(@use_lines) {
+    my @custom_inc = $self->evalUseLines(@use_lines);
+
+    return @custom_inc;
+}
+
+=head2 getUseLines
+
+    Find 'use lib ' lines within the current file, scrub 'FindBin' into the
+    actual file name in these lines, and return them.
+
+    This can be overridden or (more appropriately) extended via an 'around'
+    modifier to pull in extra use statements if desired.
+
+=cut
+sub getUseLines {
+    my $self = shift;
+
+    my @raw_use_lines = grep(m/use lib /, $self->curwin->Buffer->Get(1 .. $self->curwin->Buffer->Count()));
+    VIM::Msg("raw_use_lines:\n    ".join("\n    ", @raw_use_lines)) if($self->debug);
+
+    my $current_file = VIM::Eval('expand("%:p:h")');
+
+    my @use_lines;
+
+    for my $use_line(@raw_use_lines) {
         VIM::Msg("original use_line: $use_line") if($self->debug);
         if($use_line =~ m/FindBin/) {
             # Replace FindBin::? with appropriate overrides from the VIM API.
-            my $current_file = VIM::Eval('expand("%:p:h")');
             $use_line =~ s{\$FindBin::Bin}{$current_file}g;
             $use_line =~ s{\$FindBin::RealBin}{$current_file}g;
         }
-        try {
-            VIM::Msg("modified use_line: $use_line") if($self->debug);
-            eval($use_line);
-        } catch {
-            # Do nothing as this was un-eval-able
-        };
+        VIM::Msg("modified use_line: $use_line") if($self->debug);
+        push(@use_lines, $use_line);
     }
 
-    return @INC;
+    return @use_lines;
+}
+
+=head2 evalUseLines
+
+    Eval use_lines and return the resultant @INC.
+    Will pass $ENV{_PERL5LIB} into the `/usr/bin/env perl` command if it is defined.
+
+    Accepts:
+        An array of code to be eval'd, one at a time, within a `try{}`.
+
+    Returns:
+        An array representing the resultant @INC after all that was eval'd by `/usr/bin/env perl`.
+
+=cut
+sub evalUseLines {
+    my $self = shift;
+    my @use_lines = @_;
+
+    VIM::Msg("use_lines:\n    ".join("\n    ", @use_lines)) if($self->debug);
+
+    my $code_to_eval = join('', map { qq#try { eval(qq{$_}); };# } @use_lines);
+
+    my $perl5lib_env;
+    $perl5lib_env = "PERL5LIB=$ENV{_PERL5LIB}" if(defined($ENV{_PERL5LIB}));
+
+    my @custom_inc = `$perl5lib_env /usr/bin/env perl -e 'use Try::Tiny; $code_to_eval print join("\n", \@INC);'`;
+    chomp(@custom_inc);
+
+    VIM::Msg('@INC: ' . join(' - ', @custom_inc)) if($self->debug);
+
+    return @custom_inc;
 }
 
 
